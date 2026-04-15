@@ -3,26 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Family Galaxy</title>
+    <title>Family Galaxy | Interactive</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div id="nav-controls">
-        <button onclick="goUp()">↑ PARENT</button>
-        <button onclick="resetGalaxy()">↺ RESET</button>
+    <div id="search-container">
+        <input type="text" id="searchInput" placeholder="Search family...">
     </div>
 
-    <div id="search-container">
-    <input type="text" id="searchInput" placeholder="Search name, location, or gender...">
-    <div id="search-icon">🔍</div>
-</div>
-
-    <div id="galaxy-wrapper">
-        <div id="sun" class="sun">
-            <h1 id="sunName"></h1>
-            <p id="sunSpouse"></p>
+    <div id="details-card" class="floating-card">
+        <div class="drag-handle">⋮⋮</div>
+        <div class="card-nav">
+            <button onclick="goUp()">↑ Back</button>
+            <button onclick="resetGalaxy()">↺ Home</button>
         </div>
-        <div id="node-layer"></div>
+        
+        <div class="profile-content">
+            <h1 id="card-name">NAME</h1>
+            <p id="card-relation"></p>
+            <div class="meta-grid">
+                <div><label>Spouse</label><div id="card-spouse" class="val"></div></div>
+                <div><label>Location</label><p id="card-loc" class="val"></p></div>
+            </div>
+            <div class="sub-section">
+                <label>Siblings</label>
+                <div id="card-siblings" class="circle-list"></div>
+            </div>
+            <div class="sub-section">
+                <label>Children</label>
+                <div id="card-children" class="circle-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="galaxy-viewport">
+        <div id="galaxy-field">
+            <div class="sun-orbit">
+                <div class="sun"><h1 id="sunName"></h1></div>
+            </div>
+            <div id="node-layer"></div>
+        </div>
     </div>
 
     <script src="script.js"></script>
