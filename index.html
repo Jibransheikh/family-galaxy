@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Galaxy</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="nav-controls">
+        <button onclick="goUp()">↑ PARENT</button>
+        <button onclick="resetGalaxy()">↺ RESET</button>
+    </div>
+
+    <div id="search-container">
+    <input type="text" id="searchInput" placeholder="Search name, location, or gender...">
+    <div id="search-icon">🔍</div>
+</div>
+
+    <div id="galaxy-wrapper">
+        <div id="sun" class="sun">
+            <h1 id="sunName"></h1>
+            <p id="sunSpouse"></p>
+        </div>
+        <div id="node-layer"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
