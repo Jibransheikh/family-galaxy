@@ -2,50 +2,360 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Family Galaxy | Interactive</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Family Galaxy | Full Interactive Tree</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1115;
+            --card-bg: rgba(22, 25, 30, 0.95);
+            --male: #3b82f6;
+            --female: #ec4899;
+            --glass-shadow: 10px 10px 25px #050608, -5px -5px 15px rgba(255,255,255,0.01);
+        }
+
+        body, html { 
+            margin: 0; padding: 0; background: var(--bg); 
+            color: #e2e8f0; font-family: 'Inter', sans-serif; 
+            height: 100vh; width: 100vw; overflow: hidden; 
+            touch-action: none;
+        }
+
+        #galaxy-viewport {
+            width: 100vw; height: 100vh;
+            cursor: grab; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        #galaxy-field {
+            position: relative; width: 4000px; height: 4000px;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.1s ease-out;
+        }
+
+        /* SEARCH */
+        #search-container { 
+            position: fixed; top: 20px; right: 20px; left: 20px; z-index: 3000; 
+            display: flex; flex-direction: column; align-items: flex-end;
+        }
+        #searchInput { 
+            background: var(--card-bg); border: 1px solid rgba(255,255,255,0.1); 
+            padding: 12px 20px; border-radius: 50px; color: #fff; outline: none; 
+            width: 100%; max-width: 300px; backdrop-filter: blur(10px); font-size: 16px;
+        }
+        #search-results { 
+            width: 100%; max-width: 300px; background: var(--card-bg); 
+            border-radius: 15px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.1); 
+            display: none; max-height: 200px; overflow-y: auto; 
+        }
+        .search-item { padding: 12px 20px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); }
+
+        /* DETAILS CARD - NOW RESIZABLE */
+        .floating-card {
+            position: fixed; top: 30px; left: 30px; width: 340px;
+            background: var(--card-bg); backdrop-filter: blur(30px);
+            border-radius: 24px; padding: 20px; z-index: 2000;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: var(--glass-shadow);
+            resize: both; /* Enables resizing */
+            overflow: auto; /* Required for resize to work */
+            min-width: 280px; min-height: 300px;
+            max-width: 90vw; max-height: 90vh;
+        }
+        
+        /* Scrollbar styling for the resizable card */
+        .floating-card::-webkit-scrollbar { width: 8px; }
+        .floating-card::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 10px; }
+        .floating-card::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+        .drag-handle { text-align: center; color: #475569; cursor: move; margin-bottom: 10px; font-size: 1.2rem; }
+
+        /* PLANETS */
+        .planet {
+            width: 85px; height: 85px; border-radius: 50%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            box-shadow: var(--glass-shadow); cursor: pointer;
+            transition: 0.3s ease;
+        }
+        .planet b { font-size: 0.6rem; color: #fff; text-transform: uppercase; text-align: center; padding: 0 5px; }
+        .planet span { font-size: 0.9rem; margin-top: 2px; }
+
+        .male { background: radial-gradient(circle at 30% 30%, #3b82f6, #1e3a8a); }
+        .female { background: radial-gradient(circle at 30% 30%, #ec4899, #831843); }
+        .passed { background: #1e293b; opacity: 0.4; filter: grayscale(1); }
+
+        .node-wrapper { position: absolute; transform: translate(-50%, -50%); }
+
+        .sun { padding: 20px 40px; border-radius: 50px; background: var(--card-bg); border: 1px solid rgba(255,255,255,0.1); text-align: center; min-width: 150px; }
+        .sun h1 { margin: 0; font-size: 1.1rem; letter-spacing: 2px; color: #fff; }
+
+        /* CARD CONTENT */
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        label { font-size: 0.55rem; text-transform: uppercase; color: #64748b; font-weight: 600; }
+        .val { font-size: 0.8rem; color: #cbd5e1; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .circle-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+        .mini-node { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 600; cursor: pointer; color: white; border: 1px solid rgba(255,255,255,0.1); }
+        .clickable-link { color: var(--male); cursor: pointer; text-decoration: underline; }
+        .sub-section { margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; }
+
+        @media (max-width: 768px) {
+            .floating-card { 
+                top: auto !important; bottom: 0 !important; left: 0 !important; 
+                width: 100% !important; border-radius: 24px 24px 0 0; 
+                max-height: 50vh; overflow-y: auto; padding: 20px;
+                box-sizing: border-box; resize: none; /* Disable manual resize on mobile */
+            }
+            .drag-handle { display: none; }
+            .planet { width: 75px; height: 75px; }
+        }
+    </style>
 </head>
 <body>
+
     <div id="search-container">
-        <input type="text" id="searchInput" placeholder="Search family...">
+        <input type="text" id="searchInput" placeholder="Search name..." oninput="handleSearch(this.value)">
+        <div id="search-results"></div>
     </div>
 
     <div id="details-card" class="floating-card">
         <div class="drag-handle">⋮⋮</div>
-        <div class="card-nav">
-            <button onclick="goUp()">↑ Back</button>
-            <button onclick="resetGalaxy()">↺ Home</button>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button onclick="goUp()" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.7rem;">↑ Up</button>
+            <button onclick="resetGalaxy()" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.7rem;">↺ Reset</button>
         </div>
+        <h1 id="card-name" style="margin:0; font-size:1.1rem; color:#fff;">NAME</h1>
+        <p id="card-relation" style="font-size:0.65rem; color:#64748b; margin:5px 0;"></p>
         
-        <div class="profile-content">
-            <h1 id="card-name">NAME</h1>
-            <p id="card-relation"></p>
-            <div class="meta-grid">
-                <div><label>Spouse</label><div id="card-spouse" class="val"></div></div>
-                <div><label>Location</label><p id="card-loc" class="val"></p></div>
-            </div>
-            <div class="sub-section">
-                <label>Siblings</label>
-                <div id="card-siblings" class="circle-list"></div>
-            </div>
-            <div class="sub-section">
-                <label>Children</label>
-                <div id="card-children" class="circle-list"></div>
-            </div>
+        <div class="meta-grid">
+            <div><label>Spouse</label><div id="card-spouse" class="val"></div></div>
+            <div><label>Location</label><p id="card-loc" class="val"></p></div>
+        </div>
+
+        <div class="sub-section" id="sec-parents">
+            <label>Parents</label>
+            <div id="card-parents" class="circle-list"></div>
+        </div>
+        <div class="sub-section" id="sec-siblings">
+            <label>Siblings</label>
+            <div id="card-siblings" class="circle-list"></div>
+        </div>
+        <div class="sub-section" id="sec-children">
+            <label>Children</label>
+            <div id="card-children" class="circle-list"></div>
+        </div>
+        <div class="sub-section" id="sec-grandkids">
+            <label>Grandchildren</label>
+            <div id="card-grandkids" class="circle-list"></div>
         </div>
     </div>
 
     <div id="galaxy-viewport">
         <div id="galaxy-field">
-            <div class="sun-orbit">
-                <div class="sun"><h1 id="sunName"></h1></div>
-            </div>
+            <div class="sun"><h1 id="sunName"></h1></div>
             <div id="node-layer"></div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        const data = {
+            "Jaffer Khan": { gender: "male", spouse: "Kulthum Janbeck", loc: "🇰🇪", children: ["Hanif", "Shakila", "Munawar", "Nasreen", "Mohamed Ali", "Naheeda"] },
+            "Kulthum Janbeck": { gender: "female", spouse: "Jaffer Khan", loc: "🇰🇪", children: ["Hanif", "Shakila", "Munawar", "Nasreen", "Mohamed Ali", "Naheeda"] },
+            
+            "Hanif": { gender: "male", loc: "🇰🇪", parent: "Jaffer Khan" },
+
+            "Shakila": { gender: "female", spouse: "Mahmoud", loc: "🇺🇸", parent: "Jaffer Khan", children: ["Marjaan", "Kamran", "Arman"] },
+            "Mahmoud": { gender: "male", spouse: "Shakila", loc: "🇺🇸", children: ["Marjaan", "Kamran", "Arman"] },
+            "Marjaan": { gender: "female", spouse: "Jabran", loc: "🇺🇸", parent: "Shakila", children: ["Saad", "Sumaiya", "Baby Girl"] },
+            "Marjaan Husband 1": { gender: "male", spouse: "Marjaan", loc: "🇺🇸", children: ["Saad", "Sumaiya"] },
+            "Saad": { gender: "male", loc: "🇺🇸", parent: "Marjaan Husband 1" },
+            "Sumaiya": { gender: "female", loc: "🇺🇸", parent: "Marjaan Husband 1" },
+            "Jabran": { gender: "male", spouse: "Marjaan", loc: "🇺🇸", children: ["Baby Girl"] },
+            "Baby Girl": { gender: "female", loc: "🇺🇸", parent: "Jabran" },
+            "Kamran": { gender: "male", loc: "🇺🇸", parent: "Shakila" },
+            "Arman": { gender: "male", loc: "🇺🇸", parent: "Shakila" },
+
+            "Munawar": { gender: "male", spouse: "Kausar", loc: "🇰🇪", parent: "Jaffer Khan", children: ["Misbah", "Sybha", "Jibran", "Anzal"] },
+            "Kausar": { gender: "female", spouse: "Munawar", loc: "🇰🇪", parent: "Kausar's Father", children: ["Misbah", "Sybha", "Jibran", "Anzal"] },
+            "Kausar's Father": { gender: "male", spouse: "Kausar's Mother", loc: "🇰🇪", children: ["Kausar"] },
+            "Kausar's Mother": { gender: "female", spouse: "Kausar's Father", loc: "🇰🇪", children: ["Kausar"] },
+            "Misbah": { gender: "female", loc: "🇰🇪", parent: "Munawar" },
+            "Jibran": { gender: "male", loc: "🇰🇪", parent: "Munawar" },
+            "Sybha": { gender: "female", spouse: "Judheim", loc: "🇹🇿", parent: "Munawar", children: ["Kahrimaan", "Larissah", "Liyaan"] },
+            "Judheim": { gender: "male", spouse: "Sybha", loc: "🇹🇿", children: ["Kahrimaan", "Larissah", "Liyaan"] },
+            "Kahrimaan": { gender: "female", loc: "🇹🇿", parent: "Sybha" },
+            "Larissah": { gender: "female", loc: "🇹🇿", parent: "Sybha" },
+            "Liyaan": { gender: "female", loc: "🇹🇿", parent: "Sybha" },
+            "Anzal": { gender: "female", spouse: "Imaad", loc: "🇰🇪", parent: "Munawar", children: ["Ainoor"] },
+            "Imaad": { gender: "male", spouse: "Anzal", loc: "🇰🇪", children: ["Ainoor"] },
+            "Ainoor": { gender: "female", loc: "🇰🇪", parent: "Anzal" },
+
+            "Nasreen": { gender: "female", spouse: "Murad", loc: "🇮🇪", parent: "Jaffer Khan", children: ["Sameer Shahmurad", "Nabeel Shahmurad", "Waleed Shahmurad", "Dadkarim Shahmurad", "Jaffer Shahmurad", "Junaid Shahmurad"] },
+            "Murad": { gender: "male", spouse: "Nasreen", loc: "🇮🇪", children: ["Sameer Shahmurad", "Nabeel Shahmurad", "Waleed Shahmurad", "Dadkarim Shahmurad", "Jaffer Shahmurad", "Junaid Shahmurad"] },
+            "Sameer Shahmurad": { gender: "male", loc: "🇹🇿", parent: "Nasreen", children: ["Arya", "Ayan"] },
+            "Sameer Wife 1": { gender: "female", spouse: "Sameer Shahmurad", loc: "🇹🇿", children: ["Arya"] },
+            "Arya": { gender: "female", loc: "🇹🇿", parent: "Sameer Wife 1" },
+            "Sameer Wife 2": { gender: "female", spouse: "Sameer Shahmurad", loc: "🇹🇿", children: ["Ayan"] },
+            "Ayan": { gender: "male", loc: "🇹🇿", parent: "Sameer Wife 2" },
+            "Nabeel Shahmurad": { gender: "male", spouse: "Nabeel Wife", loc: "🇦🇹", parent: "Nasreen", children: ["Zakaria", "Son 2", "Son 3"] },
+            "Nabeel Wife": { gender: "female", spouse: "Nabeel Shahmurad", loc: "🇦🇹", children: ["Zakaria", "Son 2", "Son 3"] },
+            "Zakaria": { gender: "male", loc: "🇦🇹", parent: "Nabeel Shahmurad" },
+            "Son 2": { gender: "male", loc: "🇦🇹", parent: "Nabeel Shahmurad" },
+            "Son 3": { gender: "male", loc: "🇦🇹", parent: "Nabeel Shahmurad" },
+            "Waleed Shahmurad": { gender: "male", loc: "🇮🇪", parent: "Nasreen" },
+            "Dadkarim Shahmurad": { gender: "male", loc: "🇮🇪", parent: "Nasreen" },
+            "Jaffer Shahmurad": { gender: "male", loc: "🇮🇪", parent: "Nasreen" },
+            "Junaid Shahmurad": { gender: "male", loc: "🇮🇪", parent: "Nasreen" },
+
+            "Mohamed Ali": { gender: "male", status: "passed", loc: "🇰🇪", parent: "Jaffer Khan" },
+            "Naheeda": { gender: "female", spouse: "Jalal", loc: "🇰🇪", parent: "Jaffer Khan", children: ["Nabeeha", "Iman"] },
+            "Jalal": { gender: "male", spouse: "Naheeda", loc: "🇰🇪", children: ["Nabeeha", "Iman"] },
+            "Nabeeha": { gender: "female", loc: "🇰🇪", parent: "Naheeda" },
+            "Iman": { gender: "female", loc: "🇰🇪", parent: "Naheeda" }
+        };
+
+        let fieldX = 0, fieldY = 0, isPanning = false, startX, startY;
+        const viewport = document.getElementById('galaxy-viewport');
+        const field = document.getElementById('galaxy-field');
+
+        // PANNING
+        const startPan = (e) => {
+            if (e.target.closest('.floating-card') || e.target.closest('#search-container')) return;
+            isPanning = true;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            startX = clientX - fieldX;
+            startY = clientY - fieldY;
+        };
+        const movePan = (e) => {
+            if (!isPanning) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            fieldX = clientX - startX;
+            fieldY = clientY - startY;
+            field.style.transform = `translate(${fieldX}px, ${fieldY}px)`;
+        };
+        viewport.addEventListener('mousedown', startPan);
+        viewport.addEventListener('touchstart', startPan);
+        window.addEventListener('mousemove', movePan);
+        window.addEventListener('touchmove', movePan);
+        window.addEventListener('mouseup', () => isPanning = false);
+        window.addEventListener('touchend', () => isPanning = false);
+
+        // SEARCH
+        function handleSearch(q) {
+            const res = document.getElementById('search-results');
+            if (!q) { res.style.display = 'none'; return; }
+            const matches = Object.keys(data).filter(n => n.toLowerCase().includes(q.toLowerCase()));
+            res.innerHTML = matches.map(m => `<div class="search-item" onclick="selectSearch('${m}')">${m}</div>`).join('');
+            res.style.display = matches.length ? 'block' : 'none';
+        }
+        function selectSearch(n) { buildUniverse(n); document.getElementById('search-results').style.display = 'none'; document.getElementById('searchInput').value = ''; }
+
+        // BUILDER
+        function buildUniverse(name) {
+            const p = data[name]; if (!p) return;
+            
+            // Header Info
+            document.getElementById('card-name').innerText = name.toUpperCase();
+            document.getElementById('sunName').innerText = name.toUpperCase();
+            document.getElementById('card-spouse').innerHTML = p.spouse ? `<span class="clickable-link" onclick="buildUniverse('${p.spouse}')">${p.spouse}</span>` : "—";
+            document.getElementById('card-loc').innerText = p.loc || "📍";
+
+            // Advanced Relation Discovery (Finds parents regardless of whether they are biological or married in)
+            let parentsList = Object.keys(data).filter(k => data[k].children?.includes(name));
+            if (p.parent && !parentsList.includes(p.parent)) parentsList.push(p.parent);
+            
+            const rel = document.getElementById('card-relation');
+            if (parentsList.length > 0) {
+                rel.innerHTML = `Child of ` + parentsList.map(par => `<span class="clickable-link" onclick="buildUniverse('${par}')">${par}</span>`).join(" & ");
+            } else { 
+                rel.innerText = "Family Root"; 
+            }
+
+            // Calculate Relations
+            let siblingsList = [];
+            parentsList.forEach(par => {
+                if (data[par].children) {
+                    data[par].children.forEach(c => { if (c !== name && !siblingsList.includes(c)) siblingsList.push(c); });
+                }
+            });
+            let kidsList = p.children || [];
+            let grandkidsList = [];
+            kidsList.forEach(k => { if(data[k]?.children) grandkidsList = [...grandkidsList, ...data[k].children]; });
+
+            // UI Section Renderer (Hides empty sections)
+            const renderSec = (id, list) => {
+                const sec = document.getElementById(`sec-${id}`);
+                const el = document.getElementById(`card-${id}`);
+                if (list.length === 0) {
+                    sec.style.display = 'none';
+                } else {
+                    sec.style.display = 'block';
+                    el.innerHTML = '';
+                    list.forEach(m => {
+                        if(!data[m]) return;
+                        const d = document.createElement('div');
+                        d.className = `mini-node ${data[m].gender} ${data[m].status === 'passed' ? 'passed' : ''}`;
+                        d.innerText = m.substring(0,2).toUpperCase();
+                        d.title = m; // Hover tooltip
+                        d.onclick = () => buildUniverse(m);
+                        el.appendChild(d);
+                    });
+                }
+            };
+
+            renderSec('parents', parentsList);
+            renderSec('siblings', siblingsList);
+            renderSec('children', kidsList);
+            renderSec('grandkids', grandkidsList);
+
+            // Galaxy Planet Layer
+            const layer = document.getElementById('node-layer'); layer.innerHTML = '';
+            const orbitItems = [...kidsList];
+            if(p.spouse && data[p.spouse]) orbitItems.push(p.spouse); // Adds spouse to the orbit
+
+            orbitItems.forEach((item, i) => {
+                const angle = (i / orbitItems.length) * (Math.PI * 2) - (Math.PI / 2);
+                const radius = window.innerWidth < 768 ? 160 : 260;
+                const wrap = document.createElement('div');
+                wrap.className = 'node-wrapper';
+                wrap.style.left = `calc(50% + ${Math.cos(angle) * radius}px)`;
+                wrap.style.top = `calc(50% + ${Math.sin(angle) * radius}px)`;
+                const node = document.createElement('div');
+                node.className = `planet ${data[item]?.gender || 'male'} ${data[item]?.status === 'passed' ? 'passed' : ''}`;
+                node.innerHTML = `<b>${item}</b><span>${data[item]?.loc || '📍'}</span>`;
+                node.onclick = () => buildUniverse(item);
+                wrap.appendChild(node); layer.appendChild(wrap);
+            });
+        }
+
+        // DRAG NAVIGATION
+        const card = document.getElementById('details-card');
+        const handle = card.querySelector('.drag-handle');
+        handle.onmousedown = (e) => {
+            if (window.innerWidth <= 768) return;
+            // Prevent drag from triggering if clicking near bottom right (resize corner)
+            if (e.target !== handle) return;
+            
+            let sx = e.clientX - card.getBoundingClientRect().left;
+            let sy = e.clientY - card.getBoundingClientRect().top;
+            document.onmousemove = (e) => { card.style.left = e.pageX - sx + 'px'; card.style.top = e.pageY - sy + 'px'; };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+
+        window.goUp = () => {
+            const cur = document.getElementById('card-name').innerText;
+            const k = Object.keys(data).find(x => x.toUpperCase() === cur);
+            
+            // Try to go up to the first discovered parent
+            let parentKeys = Object.keys(data).filter(key => data[key].children?.includes(k));
+            if (data[k]?.parent && !parentKeys.includes(data[k].parent)) parentKeys.push(data[k].parent);
+            
+            if (parentKeys.length > 0) buildUniverse(parentKeys[0]);
+        };
+        
+        window.resetGalaxy = () => { fieldX = 0; fieldY = 0; field.style.transform = `translate(0,0)`; buildUniverse("Jaffer Khan"); };
+        window.onload = () => buildUniverse("Jaffer Khan");
+    </script>
 </body>
 </html>
