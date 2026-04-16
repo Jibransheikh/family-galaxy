@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Family Galaxy | Final Polish</title>
+    <title>Family Galaxy | Interactive Tree</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -31,9 +31,9 @@
             position: relative; width: 4000px; height: 4000px;
             display: flex; align-items: center; justify-content: center;
             transition: transform 0.1s ease-out;
+            transform-origin: center center;
         }
 
-        /* SEARCH */
         #search-container { 
             position: fixed; top: 20px; right: 20px; left: 20px; z-index: 3000; 
             display: flex; flex-direction: column; align-items: flex-end;
@@ -50,7 +50,6 @@
         }
         .search-item { padding: 12px 20px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
-        /* DETAILS CARD - RESIZABLE & COLLAPSIBLE */
         .floating-card {
             position: fixed; top: 30px; left: 30px; width: 340px;
             background: var(--card-bg); backdrop-filter: blur(30px);
@@ -65,7 +64,6 @@
 
         .drag-handle { text-align: center; color: #475569; cursor: move; margin-bottom: 10px; font-size: 1.2rem; }
 
-        /* PLANETS */
         .planet {
             width: 85px; height: 85px; border-radius: 50%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -84,7 +82,6 @@
         .sun { padding: 20px 40px; border-radius: 50px; background: var(--card-bg); border: 1px solid rgba(255,255,255,0.1); text-align: center; min-width: 150px; }
         .sun h1 { margin: 0; font-size: 1.1rem; letter-spacing: 2px; color: #fff; }
 
-        /* CARD CONTENT */
         .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
         label { font-size: 0.55rem; text-transform: uppercase; color: #64748b; font-weight: 600; }
         .val { font-size: 0.8rem; color: #cbd5e1; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -93,18 +90,15 @@
         .clickable-link { color: var(--male); cursor: pointer; text-decoration: underline; }
         .sub-section { margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; }
 
-        /* MOBILE OVERRIDES */
         @media (max-width: 768px) {
             .floating-card { 
                 top: auto !important; bottom: 0 !important; left: 0 !important; 
                 width: 100% !important; border-radius: 24px 24px 0 0; 
-                max-height: 65px; /* Default collapsed height */
+                max-height: 65px;
                 padding: 15px 20px;
                 box-sizing: border-box; resize: none;
             }
-            .floating-card.expanded {
-                max-height: 60vh;
-            }
+            .floating-card.expanded { max-height: 60vh; }
             .drag-handle { display: none; }
             .planet { width: 75px; height: 75px; }
             .card-header-mobile { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
@@ -222,7 +216,7 @@
             "Iman": { gender: "female", loc: "🇰🇪", parent: "Naheeda" }
         };
 
-        let fieldX = 0, fieldY = 0, isPanning = false, startX, startY;
+        let fieldX = 0, fieldY = 0, scale = 1, isPanning = false, startX, startY, prevDiff = -1;
         const viewport = document.getElementById('galaxy-viewport');
         const field = document.getElementById('galaxy-field');
         const card = document.getElementById('details-card');
@@ -235,7 +229,10 @@
             }
         }
 
-        // PANNING
+        const updateTransform = () => {
+            field.style.transform = `translate(${fieldX}px, ${fieldY}px) scale(${scale})`;
+        };
+
         const startPan = (e) => {
             if (e.target.closest('.floating-card') || e.target.closest('#search-container')) return;
             isPanning = true;
@@ -244,22 +241,42 @@
             startX = clientX - fieldX;
             startY = clientY - fieldY;
         };
+
         const movePan = (e) => {
+            if (e.touches && e.touches.length === 2) {
+                let curDiff = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                if (prevDiff > 0) {
+                    if (curDiff > prevDiff) scale = Math.min(2, scale + 0.02);
+                    else scale = Math.max(0.3, scale - 0.02);
+                    updateTransform();
+                }
+                prevDiff = curDiff;
+                return;
+            }
             if (!isPanning) return;
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             fieldX = clientX - startX;
             fieldY = clientY - startY;
-            field.style.transform = `translate(${fieldX}px, ${fieldY}px)`;
+            updateTransform();
         };
+
         viewport.addEventListener('mousedown', startPan);
         viewport.addEventListener('touchstart', startPan);
         window.addEventListener('mousemove', movePan);
         window.addEventListener('touchmove', movePan);
-        window.addEventListener('mouseup', () => isPanning = false);
-        window.addEventListener('touchend', () => isPanning = false);
+        window.addEventListener('mouseup', () => { isPanning = false; });
+        window.addEventListener('touchend', () => { isPanning = false; prevDiff = -1; });
 
-        // SEARCH
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            scale += e.deltaY * -0.001;
+            scale = Math.min(Math.max(0.3, scale), 2);
+            updateTransform();
+        }, { passive: false });
+
+        viewport.addEventListener('dblclick', () => { scale = 1; updateTransform(); });
+
         function handleSearch(q) {
             const res = document.getElementById('search-results');
             if (!q) { res.style.display = 'none'; return; }
@@ -269,14 +286,10 @@
         }
         function selectSearch(n) { buildUniverse(n); document.getElementById('search-results').style.display = 'none'; document.getElementById('searchInput').value = ''; }
 
-        // BUILDER
         function buildUniverse(name) {
             const p = data[name]; if (!p) return;
-            
             document.getElementById('card-name').innerText = name.toUpperCase();
             document.getElementById('sunName').innerText = name.toUpperCase();
-            
-            // Spouse strictly on card
             document.getElementById('card-spouse').innerHTML = p.spouse ? `<span class="clickable-link" onclick="event.stopPropagation(); buildUniverse('${p.spouse}')">${p.spouse}</span>` : "—";
             document.getElementById('card-loc').innerText = p.loc || "📍";
 
@@ -286,9 +299,7 @@
             const rel = document.getElementById('card-relation');
             if (parentsList.length > 0) {
                 rel.innerHTML = `Child of ` + parentsList.map(par => `<span class="clickable-link" onclick="event.stopPropagation(); buildUniverse('${par}')">${par}</span>`).join(" & ");
-            } else { 
-                rel.innerText = "Family Root"; 
-            }
+            } else { rel.innerText = "Family Root"; }
 
             let siblingsList = [];
             parentsList.forEach(par => {
@@ -322,7 +333,6 @@
             renderSec('children', kidsList);
             renderSec('grandkids', grandkidsList);
 
-            // Galaxy Planet Layer - Only Kids appear here now
             const layer = document.getElementById('node-layer'); layer.innerHTML = '';
             kidsList.forEach((item, i) => {
                 const angle = (i / kidsList.length) * (Math.PI * 2) - (Math.PI / 2);
@@ -356,7 +366,7 @@
             if (parentKeys.length > 0) buildUniverse(parentKeys[0]);
         };
         
-        window.resetGalaxy = () => { fieldX = 0; fieldY = 0; field.style.transform = `translate(0,0)`; buildUniverse("Jaffer Khan"); };
+        window.resetGalaxy = () => { fieldX = 0; fieldY = 0; scale = 1; updateTransform(); buildUniverse("Jaffer Khan"); };
         window.onload = () => buildUniverse("Jaffer Khan");
     </script>
 </body>
