@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Family Galaxy | Genesis 3.2</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=Syne:wght@700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #030406;
+            --glass: rgba(8, 10, 16, 0.82);
+            --border: rgba(255,255,255,0.07);
+            --accent: #f59e0b;
+            --aura-color: 210, 120, 255;
+            --male-glow: rgba(37, 99, 235, 0.9);
+            --female-glow: rgba(219, 39, 119, 0.9);
+            --panel-w: 360px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%; height: 100%;
+            background: var(--bg); color: #fff;
+            font-family: 'Space Grotesk', sans-serif;
+            overflow: hidden; touch-action: none;
+        }
+
+        /* ── BOKEH AURA CANVAS ── */
+        #aura-canvas {
+            position: fixed; inset: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 0;
+            opacity: 0; transition: opacity 1.2s ease;
+        }
+        #aura-canvas.visible { opacity: 1; }
+
+        /* ── MAIN SVG VIEWPORT ── */
+        #viewport { position: absolute; inset: 0; width: 100vw; height: 100vh; z-index: 1; cursor: grab; }
+        #viewport.grabbing { cursor: grabbing; }
+
+        /* ══════════════════════════════════
+           BENTO PANEL
+        ══════════════════════════════════ */
+        #bento-card {
+            position: fixed;
+            top: 20px; left: 20px;
+            width: var(--panel-w);
+            z-index: 100;
+            display: flex; flex-direction: column; gap: 8px;
+            transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease;
+            transform: translateX(0); opacity: 1;
+            pointer-events: auto;
+        }
+        #bento-card.hidden {
+            transform: translateX(calc(-1 * var(--panel-w) - 40px));
+            opacity: 0; pointer-events: none;
+        }
+
+        .bento-tile {
+            background: var(--glass);
+            backdrop-filter: blur(36px); -webkit-backdrop-filter: blur(36px);
+            border: 1px solid var(--border);
+            border-radius: 16px; padding: 14px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        /* CLOSE BUTTON */
+        #bento-close {
+            position: absolute; top: 10px; right: 10px;
+            width: 26px; height: 26px; border-radius: 50%;
+            background: rgba(255,255,255,0.08); border: 1px solid var(--border);
+            color: #94a3b8; font-size: 14px; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background 0.2s, color 0.2s;
+            z-index: 10;
+        }
+        #bento-close:hover { background: rgba(255,255,255,0.18); color: #fff; }
+
+        /* ── STATS BAR ── */
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+        .stat-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 10px; padding: 8px 4px;
+            text-align: center;
+        }
+        .stat-num { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 900; color: #fff; line-height: 1; }
+        .stat-label { font-size: 0.42rem; text-transform: uppercase; color: #64748b; letter-spacing: 1px; margin-top: 3px; }
+
+        /* ── IDENTITY TILE ── */
+        .identity-tile { position: relative; }
+        .dna-badge {
+            display: inline-block; font-size: 0.52rem; padding: 3px 9px;
+            border-radius: 50px; text-transform: uppercase; font-weight: 700;
+            background: rgba(255,255,255,0.06); letter-spacing: 1px;
+            transition: background 0.5s, color 0.5s;
+        }
+        #c-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.35rem; font-weight: 900;
+            margin: 6px 0 0; line-height: 1.1;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .meta-row { display: flex; gap: 16px; margin-top: 10px; }
+        .meta-item .lbl { font-size: 0.48rem; text-transform: uppercase; color: #475569; letter-spacing: 1px; display: block; }
+        .meta-item .val { font-size: 0.82rem; color: #f1f5f9; margin-top: 1px; }
+
+        /* ── HALF-TILES ROW ── */
+        .half-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .flag-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+        #c-flag { font-size: 2.4rem; line-height: 1; }
+        #c-loc-desc { font-size: 0.5rem; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+
+        /* ── RELATIONS GRID ── */
+        .relations-tile { max-height: 22vh; overflow-y: auto; }
+        .relations-tile::-webkit-scrollbar { width: 3px; }
+        .relations-tile::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        .rel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .lbl { font-size: 0.48rem; text-transform: uppercase; color: #475569; letter-spacing: 1px; display: block; margin-bottom: 5px; }
+        .mini-grid { display: flex; flex-wrap: wrap; gap: 5px; min-height: 28px; }
+        .mini-blob {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.65rem; font-weight: 700;
+            cursor: pointer; transition: transform 0.2s, border-color 0.2s;
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+        }
+        .mini-blob:hover { transform: scale(1.15); border-color: rgba(255,255,255,0.6); }
+
+        /* ══════════════════════════════════
+           SEARCH
+        ══════════════════════════════════ */
+        #search-container {
+            position: fixed; top: 20px; right: 20px;
+            z-index: 1000; width: 220px; pointer-events: auto;
+        }
+        #searchInput {
+            width: 100%;
+            background: var(--glass); border: 1px solid var(--border);
+            padding: 11px 18px; border-radius: 50px;
+            color: #fff; outline: none;
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.82rem;
+            transition: border-color 0.2s;
+        }
+        #searchInput::placeholder { color: #475569; }
+        #searchInput:focus { border-color: rgba(255,255,255,0.25); }
+        #search-results {
+            margin-top: 8px;
+            background: var(--glass); border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden;
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            max-height: 280px; overflow-y: auto;
+        }
+        #search-results::-webkit-scrollbar { width: 3px; }
+        #search-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+        .search-item {
+            padding: 10px 18px; cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.82rem; transition: background 0.15s, color 0.15s;
+        }
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+
+        /* ══════════════════════════════════
+           BOTTOM TOGGLE BAR
+        ══════════════════════════════════ */
+        #ui-toggle-bar {
+            position: fixed; bottom: 20px; left: 20px;
+            z-index: 1000; display: flex; gap: 8px;
+            pointer-events: auto;
+        }
+        .ui-btn, .ui-select {
+            background: var(--glass); border: 1px solid var(--border);
+            padding: 10px 18px; border-radius: 50px;
+            color: #fff; font-size: 0.6rem; text-transform: uppercase;
+            letter-spacing: 1px; cursor: pointer; font-weight: 700;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+            font-family: 'Space Grotesk', sans-serif;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            outline: none;
+        }
+        .ui-btn:hover { background: rgba(255,255,255,0.9); color: #000; border-color: transparent; }
+        .ui-select { appearance: none; -webkit-appearance: none; padding-right: 28px; }
+        .ui-select option { background: #0d0f14; color: #fff; }
+
+        /* ══════════════════════════════════
+           GRAPH ELEMENTS
+        ══════════════════════════════════ */
+        .link { pointer-events: none; transition: opacity 0.35s, stroke-width 0.35s; }
+        .link.parent-link { stroke: rgba(255,255,255,0.07); stroke-width: 1.5px; }
+        .link.marriage { stroke-dasharray: 5,7; stroke-width: 2.5px; stroke-linecap: round; opacity: 0.7; }
+
+        .link.active-link { opacity: 1 !important; }
+        .link.parent-link.active-link {
+            stroke: rgba(255,255,255,0.7) !important;
+            stroke-width: 3px; stroke-dasharray: 5,9;
+            animation: flow 12s linear infinite;
+        }
+        @keyframes flow { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 0; } }
+
+        .link.dimmed { opacity: 0.025 !important; }
+
+        /* NODES */
+        .node-group { cursor: pointer; }
+        .node-group.dimmed { pointer-events: auto !important; }  /* keep clickable always */
+
+        .node-blob {
+            stroke: none;
+            transition: filter 0.3s, transform 0.25s;
+            transform-origin: center;
+            transform-box: fill-box;
+        }
+        .node-group:hover .node-blob { transform: scale(1.18); }
+
+        /* dimmed nodes: faint by default, lift on hover */
+        .node-group.dimmed .node-blob {
+            filter: brightness(0.25) saturate(0.3) !important;
+            transition: filter 0.2s, transform 0.2s;
+        }
+        .node-group.dimmed:hover .node-blob {
+            filter: brightness(0.75) saturate(0.7) !important;
+            transform: scale(1.12);
+        }
+
+        .node-text {
+            fill: #fff; font-size: 10px; font-weight: 700;
+            font-family: 'Syne', sans-serif;
+            text-anchor: middle; pointer-events: none;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .node-group.dimmed .node-text { fill: rgba(255,255,255,0.35); }
+
+        /* ══════════════════════════════════
+           MOBILE OVERRIDES
+        ══════════════════════════════════ */
+        @media (max-width: 768px) {
+            :root { --panel-w: 100vw; }
+
+            #bento-card {
+                top: auto; bottom: 0; left: 0; right: 0;
+                width: 100%; max-height: 72vh;
+                border-radius: 22px 22px 0 0;
+                transform: translateY(100%);
+                gap: 0;
+                overflow-y: auto;
+            }
+            #bento-card.visible-mobile {
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: auto;
+            }
+            #bento-card.hidden {
+                transform: translateY(110%);
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .bento-tile {
+                border-radius: 0;
+                border-left: none; border-right: none;
+                border-top: none;
+            }
+            #bento-card .bento-tile:first-child { border-radius: 22px 22px 0 0; border-top: 1px solid var(--border); }
+
+            #search-container { top: 14px; right: 14px; width: 160px; }
+            #searchInput { padding: 9px 14px; font-size: 0.75rem; }
+
+            #ui-toggle-bar {
+                bottom: 14px; left: 14px;
+                width: calc(100% - 28px);
+                justify-content: space-between;
+            }
+            .ui-select { flex: 1; }
+
+            .stats-grid { grid-template-columns: repeat(5, 1fr); }
+            .stat-num { font-size: 0.95rem; }
+
+            /* Drag pill at top of bento on mobile */
+            #bento-drag-pill {
+                display: flex;
+                justify-content: center; align-items: center;
+                padding: 10px 0 2px;
+                background: var(--glass);
+                border-radius: 22px 22px 0 0;
+            }
+            #bento-drag-pill::before {
+                content: '';
+                width: 36px; height: 4px;
+                background: rgba(255,255,255,0.2);
+                border-radius: 2px;
+            }
+        }
+
+        @media (min-width: 769px) {
+            #bento-drag-pill { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- BOKEH AURA -->
+<canvas id="aura-canvas"></canvas>
+
+<!-- SEARCH -->
+<div id="search-container">
+    <input type="text" id="searchInput" placeholder="Search galaxy..." autocomplete="off">
+    <div id="search-results"></div>
+</div>
+
+<!-- BENTO PANEL -->
+<div id="bento-card">
+    <div id="bento-drag-pill"></div>
+
+    <!-- STATS -->
+    <div class="bento-tile" style="position:relative;">
+        <button id="bento-close" onclick="hideBento()" title="Close">×</button>
+        <div class="stats-grid">
+            <div class="stat-box"><div id="stat-total" class="stat-num">0</div><div class="stat-label">Total</div></div>
+            <div class="stat-box"><div id="stat-gens"  class="stat-num">0</div><div class="stat-label">Gens</div></div>
+            <div class="stat-box"><div id="stat-living" class="stat-num">0</div><div class="stat-label">Living</div></div>
+            <div class="stat-box"><div id="stat-male"  class="stat-num">0</div><div class="stat-label">Male</div></div>
+            <div class="stat-box"><div id="stat-female" class="stat-num">0</div><div class="stat-label">Female</div></div>
+        </div>
+    </div>
+
+    <!-- IDENTITY -->
+    <div class="bento-tile identity-tile">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="lbl" style="margin:0;">IDENTITY</span>
+            <span id="dna-badge" class="dna-badge">GALAXY SYNC</span>
+        </div>
+        <div id="c-name">SELECT SOMEONE</div>
+        <div class="meta-row">
+            <div class="meta-item"><span class="lbl">Status</span><span id="c-status" class="val">—</span></div>
+            <div class="meta-item"><span class="lbl">Residing</span><span id="c-reside" class="val">—</span></div>
+            <div class="meta-item"><span class="lbl">Spouse</span><span id="c-spouse" class="val" style="color:var(--accent);cursor:pointer;">—</span></div>
+        </div>
+    </div>
+
+    <!-- HALF ROW -->
+    <div class="half-row" style="padding: 0 0; gap:8px;" id="half-row-wrapper">
+        <div class="bento-tile">
+            <span class="lbl">Direct Lineage</span>
+            <div id="c-lineage" class="val" style="font-size:0.85rem;">—</div>
+        </div>
+        <div class="bento-tile flag-tile">
+            <span class="lbl">Location</span>
+            <div id="c-flag">📍</div>
+            <div id="c-loc-desc"></div>
+        </div>
+    </div>
+
+    <!-- RELATIONS -->
+    <div class="bento-tile relations-tile">
+        <div class="rel-grid">
+            <div><span class="lbl">Parents</span><div id="mini-parents" class="mini-grid"></div></div>
+            <div><span class="lbl">Grandparents</span><div id="mini-grandparents" class="mini-grid"></div></div>
+            <div><span class="lbl">Children</span><div id="mini-children" class="mini-grid"></div></div>
+            <div><span class="lbl">Grandchildren</span><div id="mini-grandkids" class="mini-grid"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div id="ui-toggle-bar">
+    <button class="ui-btn" id="dashboard-btn" onclick="toggleBento()">Dashboard</button>
+    <select class="ui-select" id="galaxy-filter" onchange="applyFilter(this.value)">
+        <option value="all">👁️ Entire Galaxy</option>
+        <option value="men">👨 Highlight Men</option>
+        <option value="women">👩 Highlight Women</option>
+        <option value="passed">🕊️ Highlight Passed</option>
+        <optgroup label="DNA Bloodlines" id="dna-filters"></optgroup>
+    </select>
+</div>
+
+<!-- GRAPH -->
+<svg id="viewport">
+    <defs id="gradient-defs"></defs>
+</svg>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  DATA
+// ══════════════════════════════════════════════════════
+const rawData = {
+    "Jaffer Khan":      { gender:"male",   spouse:"Kulthum Janbeck", loc:"🇰🇪", children:["Hanif","Shakila","Munawar","Nasreen","Mohamed Ali","Naheeda"] },
+    "Kulthum Janbeck":  { gender:"female", spouse:"Jaffer Khan",     loc:"🇰🇪", children:["Hanif","Shakila","Munawar","Nasreen","Mohamed Ali","Naheeda"] },
+    "Hanif":            { gender:"male",   loc:"🇰🇪", parent:"Jaffer Khan" },
+    "Shakila":          { gender:"female", spouse:"Mahmoud",         loc:"🇺🇸", parent:"Jaffer Khan",  children:["Marjaan","Kamran","Arman"] },
+    "Mahmoud":          { gender:"male",   spouse:"Shakila",         loc:"🇺🇸", children:["Marjaan","Kamran","Arman"] },
+
+    // Marjaan had two marriages — Umeed (children: Saad, Sumaiya) then Jabran (child: Baby Girl)
+    "Marjaan":          { gender:"female", spouse:"Jabran",          loc:"🇺🇸", parent:"Shakila", children:["Saad","Sumaiya","Baby Girl"] },
+    "Umeed":            { gender:"male",   spouse:"Marjaan",         loc:"🇺🇸", children:["Saad","Sumaiya"] },
+    "Saad":             { gender:"male",   loc:"🇺🇸", parent:"Umeed" },
+    "Sumaiya":          { gender:"female", loc:"🇺🇸", parent:"Umeed" },
+    "Jabran":           { gender:"male",   spouse:"Marjaan",         loc:"🇺🇸", children:["Baby Girl"] },
+    "Baby Girl":        { gender:"female", loc:"🇺🇸", parent:"Jabran" },
+
+    "Kamran":           { gender:"male",   loc:"🇺🇸", parent:"Shakila" },
+    "Arman":            { gender:"male",   loc:"🇺🇸", parent:"Shakila" },
+
+    "Munawar":          { gender:"male",   spouse:"Kausar",          loc:"🇰🇪", parent:"Jaffer Khan", children:["Misbah","Sybha","Jibran","Anzal"] },
+    "Kausar":           { gender:"female", spouse:"Munawar",         loc:"🇰🇪", children:["Misbah","Sybha","Jibran","Anzal"] },
+    "Misbah":           { gender:"female", loc:"🇰🇪", parent:"Munawar" },
+    "Jibran":           { gender:"male",   loc:"🇰🇪", parent:"Munawar" },
+    "Sybha":            { gender:"female", spouse:"Judheim",         loc:"🇹🇿", parent:"Munawar", children:["Kahrimaan","Larissah","Liyaan"] },
+    "Judheim":          { gender:"male",   spouse:"Sybha",           loc:"🇹🇿", children:["Kahrimaan","Larissah","Liyaan"] },
+    "Kahrimaan":        { gender:"female", loc:"🇹🇿", parent:"Sybha" },
+    "Larissah":         { gender:"female", loc:"🇹🇿", parent:"Sybha" },
+    "Liyaan":           { gender:"female", loc:"🇹🇿", parent:"Sybha" },
+    "Anzal":            { gender:"female", spouse:"Imaad",           loc:"🇰🇪", parent:"Munawar", children:["Ainoor"] },
+    "Imaad":            { gender:"male",   spouse:"Anzal",           loc:"🇰🇪", children:["Ainoor"] },
+    "Ainoor":           { gender:"female", loc:"🇰🇪", parent:"Anzal" },
+
+    "Nasreen":          { gender:"female", spouse:"Murad",           loc:"🇮🇪", parent:"Jaffer Khan", children:["Sameer Shahmurad","Nabeel Shahmurad","Waleed Shahmurad","Dadkarim Shahmurad","Jaffer Shahmurad","Junaid Shahmurad"] },
+    "Murad":            { gender:"male",   spouse:"Nasreen",         loc:"🇮🇪", children:["Sameer Shahmurad","Nabeel Shahmurad","Waleed Shahmurad","Dadkarim Shahmurad","Jaffer Shahmurad","Junaid Shahmurad"] },
+
+    // Sameer had two wives — each is the parent for their respective child
+    "Sameer Shahmurad": { gender:"male",   loc:"🇹🇿", parent:"Nasreen", children:["Arya","Ayan"] },
+    "Sameer Wife 1":    { gender:"female", spouse:"Sameer Shahmurad", loc:"🇹🇿", children:["Arya"] },
+    "Arya":             { gender:"female", loc:"🇹🇿", parent:"Sameer Wife 1" },
+    "Sameer Wife 2":    { gender:"female", spouse:"Sameer Shahmurad", loc:"🇹🇿", children:["Ayan"] },
+    "Ayan":             { gender:"male",   loc:"🇹🇿", parent:"Sameer Wife 2" },
+
+    "Nabeel Shahmurad": { gender:"male",   spouse:"Nabeel Wife",     loc:"🇦🇹", parent:"Nasreen", children:["Zakaria","Son 2","Son 3"] },
+    "Nabeel Wife":      { gender:"female", spouse:"Nabeel Shahmurad", loc:"🇦🇹", children:["Zakaria","Son 2","Son 3"] },
+    "Zakaria":          { gender:"male",   loc:"🇦🇹", parent:"Nabeel Shahmurad" },
+    "Son 2":            { gender:"male",   loc:"🇦🇹", parent:"Nabeel Shahmurad" },
+    "Son 3":            { gender:"male",   loc:"🇦🇹", parent:"Nabeel Shahmurad" },
+
+    "Waleed Shahmurad":   { gender:"male",   loc:"🇮🇪", parent:"Nasreen" },
+    "Dadkarim Shahmurad": { gender:"male",   loc:"🇮🇪", parent:"Nasreen" },
+    "Jaffer Shahmurad":   { gender:"male",   loc:"🇮🇪", parent:"Nasreen" },
+    "Junaid Shahmurad":   { gender:"male",   loc:"🇮🇪", parent:"Nasreen" },
+
+    "Mohamed Ali":      { gender:"male",   status:"passed", loc:"🇰🇪", parent:"Jaffer Khan" },
+    "Naheeda":          { gender:"female", spouse:"Jalal",            loc:"🇰🇪", parent:"Jaffer Khan", children:["Nabeeha","Iman"] },
+    "Jalal":            { gender:"male",   spouse:"Naheeda",          loc:"🇰🇪", children:["Nabeeha","Iman"] },
+    "Nabeeha":          { gender:"female", loc:"🇰🇪", parent:"Naheeda" },
+    "Iman":             { gender:"female", loc:"🇰🇪", parent:"Naheeda" }
+};
+
+// ══════════════════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════════════════
+function calculateStats() {
+    const all = Object.values(rawData);
+    const total  = all.length;
+    const passed = all.filter(p => p.status === 'passed').length;
+    const males  = all.filter(p => p.gender === 'male').length;
+    const females= all.filter(p => p.gender === 'female').length;
+
+    // BFS for generation depth
+    const levels = { "Jaffer Khan":1, "Kulthum Janbeck":1 };
+    const queue  = ["Jaffer Khan"];
+    let maxGen = 1;
+    while (queue.length) {
+        const curr = queue.shift();
+        const p = rawData[curr];
+        if (p && p.children) {
+            p.children.forEach(c => {
+                if (!levels[c]) {
+                    levels[c] = levels[curr] + 1;
+                    if (levels[c] > maxGen) maxGen = levels[c];
+                    queue.push(c);
+                }
+            });
+        }
+    }
+
+    document.getElementById('stat-total').textContent  = total;
+    document.getElementById('stat-living').textContent = total - passed;
+    document.getElementById('stat-gens').textContent   = maxGen;
+    document.getElementById('stat-male').textContent   = males;
+    document.getElementById('stat-female').textContent = females;
+}
+calculateStats();
+
+// ══════════════════════════════════════════════════════
+//  BOKEH AURA ENGINE
+// ══════════════════════════════════════════════════════
+const auraCanvas = document.getElementById('aura-canvas');
+const auraCtx    = auraCanvas.getContext('2d');
+let auraColor    = [80, 100, 200]; // RGB, default purple-blue
+let auraOrbs     = [];
+let auraAnimId   = null;
+let auraActive   = false;
+
+function resizeAura() {
+    auraCanvas.width  = window.innerWidth;
+    auraCanvas.height = window.innerHeight;
+}
+resizeAura();
+window.addEventListener('resize', resizeAura);
+
+function initOrbs(color) {
+    auraOrbs = [];
+    const W = auraCanvas.width, H = auraCanvas.height;
+    const count = 5;
+    for (let i = 0; i < count; i++) {
+        auraOrbs.push({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            r: 200 + Math.random() * 260,
+            vx: (Math.random() - 0.5) * 0.28,
+            vy: (Math.random() - 0.5) * 0.28,
+            phase: Math.random() * Math.PI * 2,
+            phaseSpeed: 0.003 + Math.random() * 0.004,
+            color: color
+        });
+    }
+}
+
+function drawAura() {
+    const W = auraCanvas.width, H = auraCanvas.height;
+    auraCtx.clearRect(0, 0, W, H);
+
+    auraOrbs.forEach(orb => {
+        orb.x += orb.vx;
+        orb.y += orb.vy;
+        orb.phase += orb.phaseSpeed;
+
+        // Soft bounce
+        if (orb.x < -orb.r) orb.x = W + orb.r;
+        if (orb.x > W + orb.r) orb.x = -orb.r;
+        if (orb.y < -orb.r) orb.y = H + orb.r;
+        if (orb.y > H + orb.r) orb.y = -orb.r;
+
+        const pulse = 0.9 + Math.sin(orb.phase) * 0.1;
+        const alpha = (0.045 + Math.sin(orb.phase * 0.7) * 0.015) * pulse;
+        const [r, g, b] = orb.color;
+
+        const grad = auraCtx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.r * pulse);
+        grad.addColorStop(0,   `rgba(${r},${g},${b},${alpha})`);
+        grad.addColorStop(0.5, `rgba(${r},${g},${b},${alpha * 0.4})`);
+        grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+
+        auraCtx.fillStyle = grad;
+        auraCtx.beginPath();
+        auraCtx.arc(orb.x, orb.y, orb.r * pulse, 0, Math.PI * 2);
+        auraCtx.fill();
+    });
+
+    auraAnimId = requestAnimationFrame(drawAura);
+}
+
+function setAuraColor(hexOrHsl) {
+    // Parse HSL string like "hsl(210, 85%, 60%)"
+    const hslMatch = hexOrHsl.match(/hsl\((\d+),\s*([\d.]+)%,\s*([\d.]+)%\)/);
+    if (hslMatch) {
+        const [, h, s, l] = hslMatch.map(Number);
+        // Quick HSL→RGB
+        const hslToRgb = (h, s, l) => {
+            s /= 100; l /= 100;
+            const k = n => (n + h / 30) % 12;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+            return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
+        };
+        auraColor = hslToRgb(h, s, l);
+    }
+    auraOrbs.forEach(orb => orb.color = auraColor);
+}
+
+function startAura(colorStr) {
+    if (!auraActive) {
+        initOrbs(auraColor);
+        auraCanvas.classList.add('visible');
+        auraActive = true;
+        drawAura();
+    }
+    setAuraColor(colorStr);
+}
+
+// ══════════════════════════════════════════════════════
+//  D3 SETUP
+// ══════════════════════════════════════════════════════
+let W = window.innerWidth, H = window.innerHeight;
+const svg = d3.select("#viewport").attr("viewBox", [0, 0, W, H]);
+const g   = svg.append("g");
+
+const zoom = d3.zoom()
+    .scaleExtent([0.08, 4])
+    .on("zoom", e => g.attr("transform", e.transform));
+svg.call(zoom);
+svg.on("mousedown", () => document.getElementById('viewport').classList.add('grabbing'));
+svg.on("mouseup",   () => document.getElementById('viewport').classList.remove('grabbing'));
+
+// ══════════════════════════════════════════════════════
+//  LINEAGE ENGINE
+// ══════════════════════════════════════════════════════
+const lineageCache  = {};
+const distinctHues  = [210, 280, 45, 150, 320, 0, 90, 180, 30, 250];
+const distinctShapes= ['hexagon','diamond','burst','smooth','octagon','star'];
+let branchIdx = 0;
+const rootSet = new Set();
+
+function getLineage(name) {
+    if (lineageCache[name]) return lineageCache[name];
+
+    // Walk up the paternal line
+    let current = name;
+    const visited = new Set();
+
+    while (current && !visited.has(current)) {
+        visited.add(current);
+        const p = rawData[current];
+        if (!p || !p.parent) break;
+
+        const parentName = p.parent;
+        const parentData = rawData[parentName];
+        if (!parentData) break;
+
+        // Find the father: if parent is male, that's dad; else look at spouse
+        let father = null;
+        if (parentData.gender === 'male') {
+            father = parentName;
+        } else if (parentData.spouse && rawData[parentData.spouse] && rawData[parentData.spouse].gender === 'male') {
+            father = parentData.spouse;
+        } else {
+            // Parent is female with no male spouse — they ARE the root for this line
+            father = parentName;
+        }
+
+        if (!father || father === current) break;
+        current = father;
+    }
+
+    // Assign branch data to root if not yet seen
+    if (!lineageCache[current]) {
+        const hue   = distinctHues[branchIdx % distinctHues.length];
+        const shape = distinctShapes[branchIdx % distinctShapes.length];
+        branchIdx++;
+        lineageCache[current] = {
+            root: current,
+            color: `hsl(${hue}, 80%, 62%)`,
+            shape
+        };
+        rootSet.add(current);
+    }
+
+    // Propagate to all nodes in path
+    const rootData = lineageCache[current];
+    visited.forEach(node => { if (!lineageCache[node]) lineageCache[node] = rootData; });
+    return rootData;
+}
+
+// ══════════════════════════════════════════════════════
+//  BUILD NODES & LINKS
+// ══════════════════════════════════════════════════════
+const nodes = Object.keys(rawData).map(id => ({ id, ...rawData[id] }));
+
+// Pre-warm lineage
+nodes.forEach(n => getLineage(n.id));
+
+// Build links — handle multi-spouse marriages correctly
+const links = [];
+const marriageSeen = new Set();
+
+nodes.forEach(n => {
+    // Parent → child links
+    if (n.children) {
+        n.children.forEach(c => {
+            links.push({ source: n.id, target: c, type: 'parent' });
+        });
+    }
+    // Marriage links (deduplicated by sorted pair)
+    if (n.spouse && rawData[n.spouse]) {
+        const key = [n.id, n.spouse].sort().join('||');
+        if (!marriageSeen.has(key)) {
+            marriageSeen.add(key);
+            const safeId = key.replace(/[^a-zA-Z0-9]/g, '_');
+            links.push({ source: n.id, target: n.spouse, type: 'marriage', linkId: safeId });
+        }
+    }
+});
+
+// Populate filter dropdown
+const filterGroup = document.getElementById('dna-filters');
+rootSet.forEach(root => {
+    const opt = document.createElement('option');
+    opt.value = `branch-${root}`;
+    opt.textContent = `🧬 Line of ${root}`;
+    filterGroup.appendChild(opt);
+});
+
+// ── MARRIAGE GRADIENTS ──
+const defs = d3.select("#gradient-defs");
+links.filter(l => l.type === 'marriage').forEach(l => {
+    const grad = defs.append("linearGradient")
+        .attr("id", `grad-${l.linkId}`)
+        .attr("gradientUnits", "userSpaceOnUse");
+    grad.append("stop").attr("offset", "0%").attr("stop-color",   () => getLineage(typeof l.source === 'object' ? l.source.id : l.source).color);
+    grad.append("stop").attr("offset", "100%").attr("stop-color", () => getLineage(typeof l.target === 'object' ? l.target.id : l.target).color);
+});
+
+// ══════════════════════════════════════════════════════
+//  SIMULATION
+// ══════════════════════════════════════════════════════
+const simulation = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id)
+        .distance(d => d.type === 'marriage' ? 55 : 190))
+    .force("charge", d3.forceManyBody().strength(-2800))
+    .force("center",    d3.forceCenter(W / 2, H / 2))
+    .force("collision", d3.forceCollide().radius(115));
+
+// ── LINKS ──
+const link = g.append("g")
+    .selectAll("line").data(links).enter().append("line")
+    .attr("class", d => `link ${d.type === 'marriage' ? 'marriage' : 'parent-link'}`);
+
+// Set marriage stroke after simulation assigns objects
+link.filter(d => d.type === 'marriage')
+    .style("stroke", d => `url(#grad-${d.linkId})`);
+
+// ── NODES ──
+function blobPath(r, shape) {
+    const pts = [];
+    let n, dev = 0;
+    if      (shape === 'hexagon') { n = 6; }
+    else if (shape === 'diamond') { n = 4; }
+    else if (shape === 'burst')   { n = 14; dev = r * 0.28; }
+    else if (shape === 'smooth')  { n = 24; }
+    else if (shape === 'octagon') { n = 8; }
+    else                          { n = 8; dev = r * 0.12; } // star
+
+    for (let i = 0; i < n; i++) {
+        const angle = (i / n) * Math.PI * 2;
+        const dist  = r + (dev ? (Math.random() - 0.5) * dev : 0);
+        pts.push([Math.cos(angle) * dist, Math.sin(angle) * dist]);
+    }
+    if (['hexagon','diamond','octagon'].includes(shape)) {
+        return d3.line().curve(d3.curveLinearClosed)(pts);
+    }
+    return d3.line().curve(d3.curveBasisClosed)(pts);
+}
+
+const node = g.append("g")
+    .selectAll("g").data(nodes).enter().append("g")
+    .attr("class", "node-group")
+    .call(d3.drag()
+        .on("start", (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on("drag",  (e, d) => { d.fx = e.x; d.fy = e.y; })
+        .on("end",   (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on("click", (e, d) => { e.stopPropagation(); selectNode(d.id); });
+
+node.append("path")
+    .attr("class", "node-blob")
+    .attr("d", d => blobPath(40, getLineage(d.id).shape))
+    .style("fill", d => getLineage(d.id).color)
+    .style("filter", d => {
+        if (d.status === 'passed') return 'grayscale(1) opacity(0.25)';
+        const glow = d.gender === 'male' ? 'rgba(37,99,235,0.8)' : 'rgba(219,39,119,0.8)';
+        return `drop-shadow(0 0 14px ${glow}) drop-shadow(0 0 28px ${glow.replace('0.8','0.4')})`;
+    });
+
+node.append("text")
+    .attr("class", "node-text")
+    .attr("dy", 4)
+    .text(d => d.id.split(' ')[0]);
+
+// ── TICK ──
+simulation.on("tick", () => {
+    link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+
+    // Update gradient coordinates
+    link.filter(d => d.type === 'marriage').each(function(d) {
+        defs.select(`#grad-${d.linkId}`)
+            .attr("x1", d.source.x).attr("y1", d.source.y)
+            .attr("x2", d.target.x).attr("y2", d.target.y);
+    });
+
+    node.attr("transform", d => `translate(${d.x},${d.y})`);
+});
+
+// ══════════════════════════════════════════════════════
+//  SELECT NODE
+// ══════════════════════════════════════════════════════
+let currentFilter  = 'all';
+let selectedNode   = null;
+
+function selectNode(name) {
+    const p = rawData[name];
+    if (!p) return;
+    selectedNode = name;
+
+    const nd       = nodes.find(n => n.id === name);
+    const rootInfo = getLineage(name);
+    const isMobile = window.innerWidth <= 768;
+
+    // ── CAMERA ──
+    if (nd) {
+        const scale = isMobile ? 1.6 : 1.15;
+        svg.transition().duration(900).ease(d3.easeCubicInOut)
+            .call(zoom.transform, d3.zoomIdentity
+                .translate(W / 2, H / 2)
+                .scale(scale)
+                .translate(-nd.x, -nd.y));
+    }
+
+    // ── AURA ──
+    startAura(rootInfo.color);
+
+    // ── IDENTITY PANEL ──
+    document.getElementById('c-name').textContent    = name.toUpperCase();
+    document.getElementById('c-reside').textContent  = p.loc || '—';
+    document.getElementById('c-status').textContent  = p.status === 'passed' ? 'Passed' : (p.spouse ? 'Married' : 'Single');
+    document.getElementById('c-lineage').textContent = p.children?.length ? `${p.children.length} children` : 'No children';
+    document.getElementById('c-flag').textContent    = p.loc || '📍';
+    document.getElementById('c-loc-desc').textContent= p.loc ? 'Origin Zone' : 'Unknown';
+
+    const spouseEl = document.getElementById('c-spouse');
+    spouseEl.textContent = p.spouse || '—';
+    spouseEl.onclick = p.spouse ? () => selectNode(p.spouse) : null;
+
+    const badge = document.getElementById('dna-badge');
+    badge.textContent = rootInfo.root === name ? 'ROOT DNA' : 'DNA SYNCED';
+    badge.style.background = rootInfo.root === name ? rootInfo.color : 'rgba(255,255,255,0.06)';
+    badge.style.color      = rootInfo.root === name ? '#000' : '#fff';
+
+    // ── HIGHLIGHT GRAPH ──
+    if (currentFilter === 'all') {
+        const connected = new Set([name]);
+        links.forEach(l => {
+            const s = l.source.id || l.source;
+            const t = l.target.id || l.target;
+            if (s === name) connected.add(t);
+            if (t === name) connected.add(s);
+        });
+
+        d3.selectAll('.node-group')
+            .classed('dimmed', n => !connected.has(n.id));
+
+        d3.selectAll('.link')
+            .classed('active-link', l => (l.source.id||l.source) === name || (l.target.id||l.target) === name)
+            .classed('dimmed', l => {
+                const s = l.source.id || l.source;
+                const t = l.target.id || l.target;
+                return s !== name && t !== name;
+            })
+            .style('opacity', null);
+    }
+
+    // ── MINI GRIDS ──
+    const childs = p.children || [];
+    const pars   = [];
+    if (p.parent) {
+        pars.push(p.parent);
+        const pd = rawData[p.parent];
+        if (pd && pd.spouse) pars.push(pd.spouse);
+    }
+    const gpars = [];
+    pars.forEach(par => {
+        const pd = rawData[par];
+        if (pd && pd.parent) {
+            gpars.push(pd.parent);
+            const gpd = rawData[pd.parent];
+            if (gpd && gpd.spouse) gpars.push(gpd.spouse);
+        }
+    });
+    const gkids = [];
+    childs.forEach(c => { if (rawData[c]?.children) gkids.push(...rawData[c].children); });
+
+    fillMini('parents',      [...new Set(pars)]);
+    fillMini('grandparents', [...new Set(gpars)]);
+    fillMini('children',     [...new Set(childs)]);
+    fillMini('grandkids',    [...new Set(gkids)]);
+
+    // ── SHOW BENTO ──
+    showBento();
+}
+
+function fillMini(id, list) {
+    const grid = document.getElementById('mini-' + id);
+    if (!grid) return;
+    if (!list.length) {
+        grid.innerHTML = `<span style="font-size:0.6rem;color:#475569;">None</span>`;
+        return;
+    }
+    grid.innerHTML = list.map(c => {
+        if (!rawData[c]) return '';
+        const cl = getLineage(c);
+        return `<div class="mini-blob" title="${c}" style="background:${cl.color};"
+                     onclick="event.stopPropagation();selectNode('${c.replace(/'/g,"\\'")}')"
+                >${c.substring(0,2)}</div>`;
+    }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  FILTER
+// ══════════════════════════════════════════════════════
+function applyFilter(val) {
+    currentFilter = val;
+
+    if (val === 'all') {
+        d3.selectAll('.node-group').classed('dimmed', false);
+        d3.selectAll('.link').classed('dimmed', false).classed('active-link', false).style('opacity', null);
+        return;
+    }
+
+    d3.selectAll('.node-group').classed('dimmed', d => {
+        if (val === 'men')    return d.gender !== 'male';
+        if (val === 'women')  return d.gender !== 'female';
+        if (val === 'passed') return d.status !== 'passed';
+        if (val.startsWith('branch-')) {
+            const root = val.replace('branch-', '');
+            return getLineage(d.id).root !== root;
+        }
+        return false;
+    });
+    d3.selectAll('.link').classed('dimmed', true).classed('active-link', false);
+}
+
+// ══════════════════════════════════════════════════════
+//  BENTO VISIBILITY
+// ══════════════════════════════════════════════════════
+const bentoCard   = document.getElementById('bento-card');
+const isMobileChk = () => window.innerWidth <= 768;
+
+function showBento() {
+    bentoCard.classList.remove('hidden');
+    if (isMobileChk()) bentoCard.classList.add('visible-mobile');
+}
+function hideBento() {
+    bentoCard.classList.add('hidden');
+    if (isMobileChk()) bentoCard.classList.remove('visible-mobile');
+}
+function toggleBento() {
+    if (bentoCard.classList.contains('hidden')) showBento();
+    else hideBento();
+}
+
+// Tap backdrop on mobile to close bento
+svg.on("click", () => {
+    if (isMobileChk() && selectedNode) hideBento();
+});
+
+// ══════════════════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════════════════
+const searchInput   = document.getElementById('searchInput');
+const searchResults = document.getElementById('search-results');
+
+searchInput.addEventListener('input', e => {
+    const val = e.target.value.toLowerCase().trim();
+    searchResults.innerHTML = '';
+    if (!val) return;
+    const matches = Object.keys(rawData).filter(k => k.toLowerCase().includes(val));
+    matches.slice(0, 12).forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'search-item';
+        div.textContent = m;
+        div.onclick = () => {
+            selectNode(m);
+            searchInput.value = '';
+            searchResults.innerHTML = '';
+        };
+        searchResults.appendChild(div);
+    });
+});
+
+// Close search on outside click
+document.addEventListener('click', e => {
+    if (!e.target.closest('#search-container')) searchResults.innerHTML = '';
+});
+
+// ══════════════════════════════════════════════════════
+//  RESIZE
+// ══════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+    W = window.innerWidth; H = window.innerHeight;
+    simulation.force("center", d3.forceCenter(W / 2, H / 2)).alpha(0.3).restart();
+    resizeAura();
+});
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+// Start hidden on desktop, auto-select root after layout settles
+bentoCard.classList.add('hidden');
+setTimeout(() => selectNode("Jaffer Khan"), 900);
+</script>
+</body>
+</html>
